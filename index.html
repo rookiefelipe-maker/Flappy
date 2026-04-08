@@ -120,6 +120,21 @@
   }
   .spill:active { transform:scale(.95); }
 
+  .char-row { margin-top:14px; }
+  .char-lbl { display:block; font-size:10px; color:var(--text2); text-transform:uppercase;
+    letter-spacing:.1em; margin-bottom:9px; }
+  .char-pills { display:flex; gap:7px; }
+  .charbtn {
+    flex:1; padding:10px 4px; background:rgba(255,255,255,.04);
+    border:1px solid var(--border); border-radius:10px;
+    color:var(--text2); font-family:Helvetica,Arial,sans-serif;
+    font-size:12px; font-weight:700; cursor:pointer;
+    transition:background .15s, color .15s, border-color .15s;
+    -webkit-appearance:none; appearance:none;
+  }
+  .charbtn.active { background:rgba(200,241,53,.13); border-color:var(--accent); color:var(--accent); }
+  .charbtn:active { transform:scale(.95); }
+
   /* PARTICLES */
   #pc { position:fixed; inset:0; pointer-events:none; z-index:15; }
 </style>
@@ -213,7 +228,14 @@ window.addEventListener('resize', resize);
 resize();
 
 // ── GAME CONSTANTS ─────────────────────────────────────
-const BC = { hex:'#c8f135', border:'#7aaa00' };
+const PLAYERS = {
+  green: { hex:'#c8f135', border:'#7aaa00' },
+  red:   { hex:'#f14a3a', border:'#a22a1d' },
+  blue:  { hex:'#4ab9ff', border:'#1f6fa6' },
+  pink:  { hex:'#ff7fc8', border:'#a64b91' },
+};
+let playerKey = localStorage.getItem('fb_player') || 'green';
+let BC = PLAYERS[playerKey];
 
 function GC(){
   const base=Math.min(W,H);
@@ -223,7 +245,7 @@ function GC(){
     BR:   base*.038,
     PW:   Math.max(52,base*.13),
     GAP:  H*.265,
-    SPD:  W*.0034 * (SPEEDS[speedKey]||1),
+    SPD:  W*.0042 * (SPEEDS[speedKey]||1),
     PINT: 1700,
     GRH:  Math.max(48,H*.075),
   };
@@ -238,7 +260,7 @@ best = parseInt(localStorage.getItem('fb')||'0');
 document.getElementById('hud-best').textContent=best;
 
 // ── SPEED ──────────────────────────────────────────────
-const SPEEDS = { slow: 0.65, normal: 1, fast: 1.55 };
+const SPEEDS = { slow: 0.65, normal: 1, fast: 3 };
 let speedKey = localStorage.getItem('fb_speed') || 'normal';
 
 function mkBird(){ const c=GC(); return {x:W*.28,y:H*.44,vy:0,r:c.BR,angle:0}; }
@@ -420,9 +442,11 @@ function showDeadScreen(){
       <div class="sbox"><div class="sbox-lbl">Récord</div><div class="sbox-val acc">${best}</div></div>
     </div>
     <button class="btn" id="again-btn">Otra vez →</button>
+    <button class="btn" id="home-btn">Volver al comienzo</button>
   `;
   document.getElementById('ov').classList.remove('hide');
   document.getElementById('again-btn').addEventListener('click', ()=>{ resumeAC(); startCountdown(); });
+  document.getElementById('home-btn').addEventListener('click', ()=>{ STATE='start'; showStart(); });
   if(isRec) requestAnimationFrame(()=>{ const b=document.getElementById('rb'); if(b) b.classList.add('show'); });
 }
 
@@ -484,6 +508,15 @@ function showStart(){
     <div class="title">Flapsy</div>
     <div class="sub">Vuela entre los tubos.<br>No choques con nada.</div>
     <button class="btn" id="play-btn">Jugar →</button>
+    <div class="char-row">
+      <span class="char-lbl">Personaje</span>
+      <div class="char-pills">
+        <button class="charbtn${playerKey==='green'?' active':''}" data-p="green">Verde</button>
+        <button class="charbtn${playerKey==='red'?' active':''}" data-p="red">Rojo</button>
+        <button class="charbtn${playerKey==='blue'?' active':''}" data-p="blue">Azul</button>
+        <button class="charbtn${playerKey==='pink'?' active':''}" data-p="pink">Rosa</button>
+      </div>
+    </div>
     <div class="speed-row">
       <span class="speed-lbl">Velocidad</span>
       <div class="speed-pills">
@@ -499,6 +532,15 @@ function showStart(){
       speedKey = btn.dataset.s;
       localStorage.setItem('fb_speed', speedKey);
       document.querySelectorAll('.spill').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+  document.querySelectorAll('.charbtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      playerKey = btn.dataset.p;
+      localStorage.setItem('fb_player', playerKey);
+      BC = PLAYERS[playerKey];
+      document.querySelectorAll('.charbtn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
     });
   });
