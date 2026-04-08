@@ -268,6 +268,13 @@ let windForce=0, windTimer=0, windActive=false;
 let shield=false, shieldTimer=0;
 let slowActive=false, slowTimer=0;
 let doubleJumpReady=false, doubleJumpUsed=false;
+// ── POWERUP NOTIFICATION ───────────────────────────────
+let puNotif = null; // { icon, text, duration, elapsed }
+const PU_MSG = {
+  shield:     { icon:'🛡', text:'Escudo activo — absorbe 1 golpe' },
+  doublejump: { icon:'⚡', text:'Doble salto — toca de nuevo en el aire' },
+  slow:       { icon:'🐢', text:'Cámara lenta — 4 segundos' },
+};
 
 best = parseInt(localStorage.getItem('fb')||'0');
 document.getElementById('hud-best').textContent=best;
@@ -343,6 +350,7 @@ function activatePowerup(type){
   if(type==='doublejump'){ doubleJumpReady=true; doubleJumpUsed=false; sfxBeep(880); vibe(20); }
   if(type==='slow'){ slowActive=true; slowTimer=4000; sfxBeep(440); vibe(20); }
   boom(bird.x, bird.y);
+  puNotif = { ...PU_MSG[type], duration: 3000, elapsed: 0 };
 }
 // SFX for wind
 const sfxWind = () => { tone(160,'sawtooth',.6,.07); };
@@ -691,6 +699,60 @@ function gameLoop(ts){
   }
 
   drawGround(); drawBird(bird);
+
+  // ── POWERUP NOTIFICATION ─────────────────────────────
+  if(puNotif){
+    puNotif.elapsed += rawDt;
+    const remaining = puNotif.duration - puNotif.elapsed;
+    if(remaining > 0){
+      const secs = Math.ceil(remaining / 1000);
+      const progress = puNotif.elapsed / puNotif.duration; // 0→1
+      // fade in first 150ms, fade out last 400ms
+      let alpha = 1;
+      if(puNotif.elapsed < 150) alpha = puNotif.elapsed / 150;
+      else if(remaining < 400) alpha = remaining / 400;
+
+      const padX = 22, padY = 14;
+      ctx.save();
+      ctx.font = `700 15px Helvetica, Arial, sans-serif`;
+      const label = `${puNotif.icon}  ${puNotif.text}`;
+      const textW = ctx.measureText(label).width;
+      const countW = ctx.measureText(`  ${secs}s`).width;
+      const totalW = textW + countW + padX * 2;
+      const boxH = 48;
+      const bx = (W - totalW) / 2;
+      const by = H * 0.18;
+
+      ctx.globalAlpha = alpha;
+      // pill background
+      ctx.fillStyle = 'rgba(13,13,13,.78)';
+      ctx.beginPath();
+      ctx.roundRect(bx, by, totalW, boxH, 100);
+      ctx.fill();
+      // border
+      ctx.strokeStyle = 'rgba(255,255,255,.10)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // progress bar along bottom of pill
+      ctx.fillStyle = 'rgba(200,241,53,.18)';
+      ctx.beginPath();
+      ctx.roundRect(bx, by + boxH - 3, totalW * (1 - progress), 3, [0, 0, 100, 100]);
+      ctx.fill();
+      // text
+      ctx.fillStyle = 'rgba(240,237,232,.92)';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, bx + padX, by + boxH / 2);
+      // countdown in accent color
+      ctx.fillStyle = '#c8f135';
+      ctx.font = `800 15px Helvetica, Arial, sans-serif`;
+      ctx.fillText(`  ${secs}s`, bx + padX + textW, by + boxH / 2);
+      ctx.restore();
+    } else {
+      puNotif = null;
+    }
+  }
+
   animId=requestAnimationFrame(gameLoop);
 }
 
@@ -736,6 +798,7 @@ function startCountdown(){
   shield=false; shieldTimer=0;
   slowActive=false; slowTimer=0;
   doubleJumpReady=false; doubleJumpUsed=false;
+  puNotif=null;
   bird=mkBird();
 
   cancelAnimationFrame(animId);
