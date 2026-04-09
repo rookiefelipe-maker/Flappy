@@ -273,12 +273,23 @@ let windForce=0, windTimer=0, windActive=false;
 let shield=false, shieldTimer=0, invincible=0;
 let slowActive=false, slowTimer=0;
 let doubleJumpReady=false, doubleJumpUsed=false;
+// ── ANTI POWERUP STATE ─────────────────────────────────
+let turboActive=false, turboTimer=0;
+let blackoutActive=false, blackoutTimer=0;
+let dizzyActive=false, dizzyTimer=0, dizzyAngle=0;
+let ghostActive=false, ghostTimer=0;
+let flipActive=false, flipTimer=0;
 // ── POWERUP NOTIFICATION ───────────────────────────────
 let puNotif = null; // { icon, text, duration, elapsed }
 const PU_MSG = {
   shield:     { icon:'🛡', text:'Escudo activo — absorbe 1 golpe' },
   doublejump: { icon:'⚡', text:'Doble salto — toca de nuevo en el aire' },
   slow:       { icon:'🐢', text:'Cámara lenta — 4 segundos' },
+  turbo:      { icon:'💢', text:'¡TURBO! — velocidad x2.5' },
+  blackout:   { icon:'🌑', text:'Apagón — ¡no ves nada!' },
+  dizzy:      { icon:'😵', text:'Mareo — pantalla girando' },
+  ghost:      { icon:'👻', text:'Fantasma — ¡no te ves!' },
+  flip:       { icon:'🔀', text:'Flip — mundo al revés' },
 };
 
 best = parseInt(localStorage.getItem('fb')||'0');
@@ -326,25 +337,42 @@ function mkBullet(e){ return {
 }; }
 
 // ── POWER-UPS ──────────────────────────────────────────
-const PU_TYPES = ['shield','doublejump','slow'];
-function mkPowerup(){
+const PU_TYPES  = ['shield','doublejump','slow'];
+const APU_TYPES = ['turbo','blackout','dizzy','ghost','flip'];
+function mkPowerup(forceAnti){
   const c=GC();
-  const type = PU_TYPES[~~(Math.random()*PU_TYPES.length)];
+  const isAnti = forceAnti || Math.random()<0.4;
+  const type = isAnti
+    ? APU_TYPES[~~(Math.random()*APU_TYPES.length)]
+    : PU_TYPES[~~(Math.random()*PU_TYPES.length)];
   return {
     x: W+40, y: H*(0.2+Math.random()*0.55),
     r: c.BR*0.85, type, phase:0,
     vx: -(c.SPD*0.9),
+    anti: isAnti,
   };
 }
-const PU_COLOR = { shield:'#4ab9ff', doublejump:'#c8f135', slow:'#ff7fc8' };
-const PU_ICON  = { shield:'🛡', doublejump:'⚡', slow:'🐢' };
+const PU_COLOR = {
+  shield:'#4ab9ff', doublejump:'#c8f135', slow:'#ff7fc8',
+  turbo:'#ff3a3a', blackout:'#ff3a3a', dizzy:'#ff3a3a', ghost:'#ff3a3a', flip:'#ff3a3a',
+};
+const PU_ICON  = {
+  shield:'🛡', doublejump:'⚡', slow:'🐢',
+  turbo:'💢', blackout:'🌑', dizzy:'😵', ghost:'👻', flip:'🔀',
+};
 function drawPowerup(pu){
   ctx.save();
   ctx.translate(pu.x, pu.y + Math.sin(pu.phase)*4);
   ctx.shadowColor=PU_COLOR[pu.type]; ctx.shadowBlur=18;
   ctx.beginPath(); ctx.arc(0,0,pu.r,0,Math.PI*2);
-  ctx.fillStyle='rgba(13,13,13,.82)'; ctx.fill();
+  ctx.fillStyle= pu.anti ? 'rgba(40,0,0,.88)' : 'rgba(13,13,13,.82)';
+  ctx.fill();
   ctx.strokeStyle=PU_COLOR[pu.type]; ctx.lineWidth=2.5; ctx.stroke();
+  // Anti-powerups get a second inner ring for warning
+  if(pu.anti){
+    ctx.beginPath(); ctx.arc(0,0,pu.r*0.7,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,60,60,0.35)'; ctx.lineWidth=1.5; ctx.stroke();
+  }
   ctx.shadowBlur=0;
   ctx.font=`${pu.r*1.1}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(PU_ICON[pu.type],0,1);
@@ -355,6 +383,15 @@ function activatePowerup(type){
   if(type==='doublejump'){ doubleJumpReady=true; doubleJumpUsed=false; sfxBeep(880); vibe(20); }
   if(type==='slow'){ slowActive=true; slowTimer=4000; sfxBeep(440); vibe(20); }
   boom(bird.x, bird.y);
+  puNotif = { ...PU_MSG[type], duration: 3000, elapsed: 0 };
+}
+function activateAntiPowerup(type){
+  if(type==='turbo'){   turboActive=true;   turboTimer=4000; }
+  if(type==='blackout'){ blackoutActive=true; blackoutTimer=3000; }
+  if(type==='dizzy'){   dizzyActive=true;   dizzyTimer=5000; }
+  if(type==='ghost'){   ghostActive=true;   ghostTimer=4000; }
+  if(type==='flip'){    flipActive=true;    flipTimer=4000; }
+  tone(200,'sawtooth',.4,.18); vibe([80,40,80,40,80]);
   puNotif = { ...PU_MSG[type], duration: 3000, elapsed: 0 };
 }
 // SFX for wind
@@ -373,18 +410,18 @@ function doFlap(){
   if(STATE!=='playing') return;
   resumeAC();
   const c=GC();
+  const flapForce = flipActive ? Math.abs(c.FLAP) : c.FLAP;
   // Normal flap: reset double jump tracking
   if(bird.vy >= 0 || !doubleJumpReady) {
-    bird.vy = c.FLAP;
-    if(doubleJumpReady) doubleJumpUsed=false; // reset on landing impulse
+    bird.vy = flapForce;
+    if(doubleJumpReady) doubleJumpUsed=false;
   } else if(doubleJumpReady && !doubleJumpUsed){
-    // mid-air second jump
-    bird.vy = c.FLAP * 0.85;
+    bird.vy = flapForce * 0.85;
     doubleJumpUsed=true; doubleJumpReady=false;
     tone(880,'sine',.1,.2); tone(1100,'sine',.08,.15,.07);
     vibe([10,10,20]); return;
   } else {
-    bird.vy = c.FLAP;
+    bird.vy = flapForce;
   }
   sfxFlap(); vibe(12);
 }
@@ -534,8 +571,8 @@ function cdLoop(ts){
 function gameLoop(ts){
   if(!lastTs) lastTs=ts;
   const rawDt=Math.min(ts-lastTs,50); lastTs=ts;
-  // 50+ slow power-up: halve game speed
-  const dt = slowActive ? rawDt * 0.5 : rawDt;
+  // 50+ slow power-up: halve game speed. Turbo: x2.5
+  const dt = slowActive ? rawDt * 0.5 : turboActive ? rawDt * 2.5 : rawDt;
   const c=GC();
 
   ctx.clearRect(0,0,W,H); drawBg();
@@ -569,6 +606,12 @@ function gameLoop(ts){
   // ── SHIELD TIMER ───────────────────────────────────
   if(shield){ shieldTimer-=rawDt; if(shieldTimer<=0){ shield=false; shieldTimer=0; } }
   if(invincible>0) invincible-=rawDt;
+  // ── ANTI POWERUP TIMERS ────────────────────────────
+  if(turboActive){   turboTimer-=rawDt;   if(turboTimer<=0){   turboActive=false; } }
+  if(blackoutActive){ blackoutTimer-=rawDt; if(blackoutTimer<=0){ blackoutActive=false; } }
+  if(dizzyActive){   dizzyTimer-=rawDt;   if(dizzyTimer<=0){   dizzyActive=false; dizzyAngle=0; } }
+  if(ghostActive){   ghostTimer-=rawDt;   if(ghostTimer<=0){   ghostActive=false; } }
+  if(flipActive){    flipTimer-=rawDt;    if(flipTimer<=0){    flipActive=false; } }
 
   // ── PIPES ──────────────────────────────────────────
   pipeTimer+=dt;
@@ -658,7 +701,11 @@ function gameLoop(ts){
   // Collect powerups
   powerups=powerups.filter(pu=>{
     const dx=bird.x-pu.x, dy=bird.y-pu.y;
-    if(Math.hypot(dx,dy)<bird.r+pu.r){ activatePowerup(pu.type); return false; }
+    if(Math.hypot(dx,dy)<bird.r+pu.r){
+      if(pu.anti) activateAntiPowerup(pu.type);
+      else activatePowerup(pu.type);
+      return false;
+    }
     return pu.x>-50;
   });
 
@@ -715,7 +762,43 @@ function gameLoop(ts){
     }
   }
 
-  drawGround(); drawBird(bird);
+  // ── ANTI-POWERUP VISUAL EFFECTS ────────────────────
+  // FLIP: transform canvas vertically
+  if(flipActive){
+    ctx.save();
+    ctx.translate(W/2, H/2);
+    ctx.scale(1,-1);
+    ctx.translate(-W/2,-H/2);
+  }
+  // DIZZY: oscillating rotation
+  if(dizzyActive){
+    dizzyAngle = Math.sin(Date.now()/180) * 0.09;
+    ctx.save();
+    ctx.translate(W/2,H/2);
+    ctx.rotate(dizzyAngle);
+    ctx.translate(-W/2,-H/2);
+  }
+
+  drawGround();
+
+  // GHOST: draw bird semi-transparent
+  if(ghostActive) ctx.globalAlpha = 0.18;
+  drawBird(bird);
+  if(ghostActive) ctx.globalAlpha = 1;
+
+  if(flipActive)  ctx.restore();
+  if(dizzyActive) ctx.restore();
+
+  // BLACKOUT: dark overlay with small circle of vision around bird
+  if(blackoutActive){
+    ctx.save();
+    const grad = ctx.createRadialGradient(bird.x,bird.y,bird.r*1.5, bird.x,bird.y,W*0.38);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(1,'rgba(0,0,0,0.97)');
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
 
   // ── POWERUP NOTIFICATION ─────────────────────────────
   if(puNotif){
@@ -838,6 +921,11 @@ function startCountdown(){
   shield=false; shieldTimer=0; invincible=0;
   slowActive=false; slowTimer=0;
   doubleJumpReady=false; doubleJumpUsed=false;
+  turboActive=false; turboTimer=0;
+  blackoutActive=false; blackoutTimer=0;
+  dizzyActive=false; dizzyTimer=0; dizzyAngle=0;
+  ghostActive=false; ghostTimer=0;
+  flipActive=false; flipTimer=0;
   puNotif=null;
   bird=mkBird();
 
