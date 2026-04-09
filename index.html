@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Flappy Bird</title>
+<title>Flapsy</title>
 <style>
   :root {
     --bg: #0d0d0d;
@@ -665,7 +665,7 @@ function gameLoop(ts){
 
   if(bird.y-bird.r<0){ bird.y=bird.r; bird.vy=1; }
   if(bird.y+bird.r>H-c.GRH){
-    if(shield){ shield=false; bird.y=H-c.GRH-bird.r; bird.vy=-2; sfxBeep(300); }
+    if(shield){ shield=false; bird.y=H-c.GRH-bird.r-2; bird.vy=c.FLAP*0.75; sfxBeep(300); boom(bird.x,bird.y); }
     else { doGameOver(); return; }
   }
 
@@ -683,7 +683,14 @@ function gameLoop(ts){
     const ge=p.topH+c.GAP, bx=bird.x, by=bird.y, br=bird.r*.80;
     if(bx+br>p.x&&bx-br<p.x+p.w){
       if(by-br<p.topH||by+br>ge){
-        if(shield){ shield=false; sfxBeep(300); break; }
+        if(shield){
+          shield=false;
+          // Push bird to the center of the gap so it doesn't re-collide next frame
+          bird.y = p.topH + c.GAP/2;
+          bird.vy = c.FLAP * 0.5;
+          sfxBeep(300); boom(bird.x, bird.y);
+          break;
+        }
         doGameOver(); return;
       }
     }
@@ -847,7 +854,7 @@ function beginPlay(){
 function showStart(){
   document.getElementById('card').innerHTML=`
     <span class="icon">🐦</span>
-    <div class="title">Flappy Bird</div>
+    <div class="title">Flapsy</div>
     <div class="sub">Vuela entre los tubos.<br>No choques con nada.</div>
     <button class="btn" id="play-btn">Jugar →</button>
     <div class="char-row">
