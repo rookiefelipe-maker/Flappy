@@ -138,6 +138,11 @@
 
   /* PARTICLES */
   #pc { position:fixed; inset:0; pointer-events:none; z-index:15; }
+
+  @keyframes redflash {
+    0%   { opacity:1; }
+    100% { opacity:0; }
+  }
 </style>
 </head>
 <body>
@@ -187,7 +192,7 @@ const vibe     = (p) => { try{ navigator.vibrate && navigator.vibrate(p); }catch
 // ── PARTICLES ──────────────────────────────────────────
 const pcEl  = document.getElementById('pc');
 const pctx  = pcEl.getContext('2d');
-const EMOJ  = ['💥','🔴','🔥'];
+const EMOJ  = ['💥','✨','⭐','🔥','💫'];
 let parts=[], praf=null;
 
 function boom(x,y) {
@@ -775,6 +780,29 @@ function doGameOver(){
   sfxDie(); vibe([50,30,120]);
   boom(bird.x,bird.y);
   document.getElementById('hud').classList.remove('show');
+
+  // Red flash overlay
+  const flash = document.createElement('div');
+  flash.style.cssText = `
+    position:fixed;inset:0;z-index:100;pointer-events:none;
+    background:rgba(220,30,30,0.55);
+    animation:redflash 0.6s ease-out forwards;
+  `;
+  document.body.appendChild(flash);
+
+  // Screen shake via canvas transform
+  let shakeFrames = 18, shakeMag = 10;
+  function shakeLoop(){
+    if(shakeFrames-- <= 0){ gc.style.transform=''; return; }
+    const dx = (Math.random()-0.5)*shakeMag*2;
+    const dy = (Math.random()-0.5)*shakeMag*2;
+    gc.style.transform = `translate(${dx}px,${dy}px)`;
+    shakeMag *= 0.85;
+    requestAnimationFrame(shakeLoop);
+  }
+  shakeLoop();
+
+  setTimeout(()=>flash.remove(), 700);
   setTimeout(showDeadScreen, 680);
 }
 
