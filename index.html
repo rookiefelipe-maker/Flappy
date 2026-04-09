@@ -265,7 +265,7 @@ let bird,pipes,score,best,animId,lastTs,pipeTimer,cdTimeout,enemies,enemyTimer,b
 // ── NEW MECHANICS STATE ────────────────────────────────
 let powerups=[], powerupTimer=0;
 let windForce=0, windTimer=0, windActive=false;
-let shield=false, shieldTimer=0;
+let shield=false, shieldTimer=0, invincible=0;
 let slowActive=false, slowTimer=0;
 let doubleJumpReady=false, doubleJumpUsed=false;
 // ── POWERUP NOTIFICATION ───────────────────────────────
@@ -563,6 +563,7 @@ function gameLoop(ts){
 
   // ── SHIELD TIMER ───────────────────────────────────
   if(shield){ shieldTimer-=rawDt; if(shieldTimer<=0){ shield=false; shieldTimer=0; } }
+  if(invincible>0) invincible-=rawDt;
 
   // ── PIPES ──────────────────────────────────────────
   pipeTimer+=dt;
@@ -665,7 +666,7 @@ function gameLoop(ts){
 
   if(bird.y-bird.r<0){ bird.y=bird.r; bird.vy=1; }
   if(bird.y+bird.r>H-c.GRH){
-    if(shield){ shield=false; bird.y=H-c.GRH-bird.r-2; bird.vy=c.FLAP*0.75; sfxBeep(300); boom(bird.x,bird.y); }
+    if(shield){ shield=false; invincible=600; bird.y=H-c.GRH-bird.r-2; bird.vy=c.FLAP*0.75; sfxBeep(300); boom(bird.x,bird.y); }
     else { doGameOver(); return; }
   }
 
@@ -673,7 +674,8 @@ function gameLoop(ts){
   for(const b of bullets){
     const dx = bird.x-b.x, dy = bird.y-b.y;
     if(Math.hypot(dx,dy) < bird.r*0.85 + b.r){
-      if(shield){ shield=false; bullets.splice(bullets.indexOf(b),1); boom(b.x,b.y); sfxBeep(300); break; }
+      if(shield){ shield=false; invincible=600; bullets.splice(bullets.indexOf(b),1); boom(b.x,b.y); sfxBeep(300); break; }
+      if(invincible>0) break;
       doGameOver(); return;
     }
   }
@@ -685,12 +687,14 @@ function gameLoop(ts){
       if(by-br<p.topH||by+br>ge){
         if(shield){
           shield=false;
-          // Push bird to the center of the gap so it doesn't re-collide next frame
-          bird.y = p.topH + c.GAP/2;
-          bird.vy = c.FLAP * 0.5;
+          invincible=600;
+          const gapCenter = p.topH + c.GAP/2;
+          bird.y = gapCenter;
+          bird.vy = bird.y > gapCenter ? c.FLAP * 0.6 : Math.abs(c.FLAP) * 0.3;
           sfxBeep(300); boom(bird.x, bird.y);
           break;
         }
+        if(invincible>0) break;
         doGameOver(); return;
       }
     }
@@ -700,7 +704,8 @@ function gameLoop(ts){
   for(const e of enemies){
     const dx = bird.x-e.x, dy = bird.y-e.y;
     if(Math.hypot(dx,dy) < bird.r*0.85 + e.r){
-      if(shield){ shield=false; sfxBeep(300); break; }
+      if(shield){ shield=false; invincible=600; sfxBeep(300); boom(bird.x,bird.y); break; }
+      if(invincible>0) break;
       doGameOver(); return;
     }
   }
@@ -802,7 +807,7 @@ function startCountdown(){
   score=0; pipes=[]; enemies=[]; bullets=[]; enemyTimer=0; pipeTimer=0; lastTs=0;
   powerups=[]; powerupTimer=3000;
   windForce=0; windTimer=3000; windActive=false;
-  shield=false; shieldTimer=0;
+  shield=false; shieldTimer=0; invincible=0;
   slowActive=false; slowTimer=0;
   doubleJumpReady=false; doubleJumpUsed=false;
   puNotif=null;
