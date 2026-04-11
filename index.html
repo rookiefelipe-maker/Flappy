@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Flappy</title>
+<title>Flapsy</title>
 <style>
   :root {
     --bg: #0d0d0d;
@@ -138,11 +138,6 @@
 
   /* PARTICLES */
   #pc { position:fixed; inset:0; pointer-events:none; z-index:15; }
-
-  @keyframes redflash {
-    0%   { opacity:1; }
-    100% { opacity:0; }
-  }
 </style>
 </head>
 <body>
@@ -254,9 +249,9 @@ function GC(){
   return {
     G:    H*.0026,
     FLAP: -H*.021,
-    BR:   base*.052,
+    BR:   base*.038,
     PW:   pipeWidth,
-    GAP:  (H*.265 - gapReduction * H*.05 - narrowFactor * H*.04) * (widegapActive ? 1.6 : 1),
+    GAP:  H*.265 - gapReduction * H*.05 - narrowFactor * H*.04,
     SPD:  W*.0042 * (SPEEDS[speedKey]||1),
     PINT: pipeInterval,
     GRH:  Math.max(48,H*.075),
@@ -270,30 +265,15 @@ let bird,pipes,score,best,animId,lastTs,pipeTimer,cdTimeout,enemies,enemyTimer,b
 // ── NEW MECHANICS STATE ────────────────────────────────
 let powerups=[], powerupTimer=0;
 let windForce=0, windTimer=0, windActive=false;
-let shield=false, shieldTimer=0, invincible=0;
+let shield=false, shieldTimer=0;
 let slowActive=false, slowTimer=0;
 let doubleJumpReady=false, doubleJumpUsed=false;
-let widegapActive=false, widegapTimer=0;
-let extralifeActive=false;
-// ── ANTI POWERUP STATE ─────────────────────────────────
-let turboActive=false, turboTimer=0;
-let blackoutActive=false, blackoutTimer=0;
-let dizzyActive=false, dizzyTimer=0, dizzyAngle=0;
-let ghostActive=false, ghostTimer=0;
-let flipActive=false, flipTimer=0;
 // ── POWERUP NOTIFICATION ───────────────────────────────
 let puNotif = null; // { icon, text, duration, elapsed }
 const PU_MSG = {
   shield:     { icon:'🛡', text:'Escudo activo — absorbe 1 golpe' },
   doublejump: { icon:'⚡', text:'Doble salto — toca de nuevo en el aire' },
   slow:       { icon:'🐢', text:'Cámara lenta — 4 segundos' },
-  widegap:    { icon:'⬆️', text:'Espacio amplio — tubos más abiertos' },
-  extralife:  { icon:'❤️', text:'Vida extra — revives si chocas' },
-  turbo:      { icon:'💢', text:'¡TURBO! — velocidad x2.5' },
-  blackout:   { icon:'🌑', text:'Apagón — ¡no ves nada!' },
-  dizzy:      { icon:'😵', text:'Mareo — pantalla girando' },
-  ghost:      { icon:'👻', text:'Fantasma — ¡no te ves!' },
-  flip:       { icon:'🔀', text:'Flip — mundo al revés' },
 };
 
 best = parseInt(localStorage.getItem('fb')||'0');
@@ -304,8 +284,19 @@ const SPEEDS = { slow: 0.65, normal: 1, fast: 3 };
 let speedKey = localStorage.getItem('fb_speed') || 'normal';
 
 function mkBird(){ const c=GC(); return {x:W*.28,y:H*.44,vy:0,r:c.BR,angle:0}; }
-function mkPipe(x){ const c=GC(),mn=H*.14,mx=H-c.GRH-c.GAP-H*.14;
-  const topH = mn + Math.random()*(mx-mn);
+let lastPipeTopH = -1; // Para evitar tubos consecutivos en posiciones similares
+
+function mkPipe(x){ const c=GC(),mn=H*.12,mx=H-c.GRH-c.GAP-H*.12;
+  // Evitar que salga en posición muy parecida a la anterior
+  let topH;
+  const range = mx - mn;
+  let attempts = 0;
+  do {
+    topH = mn + Math.random() * range;
+    attempts++;
+  } while(lastPipeTopH >= 0 && Math.abs(topH - lastPipeTopH) < range * 0.3 && attempts < 8);
+  lastPipeTopH = topH;
+
   const isMoving = (score>=20) && Math.random() < 0.5;
   // 70+: pipes also drift horizontally
   const horizDrift = (score>=70) && Math.random() < 0.5;
@@ -341,42 +332,25 @@ function mkBullet(e){ return {
 }; }
 
 // ── POWER-UPS ──────────────────────────────────────────
-const PU_TYPES  = ['shield','doublejump','slow','widegap','extralife'];
-const APU_TYPES = ['turbo','blackout','dizzy','ghost','flip'];
-function mkPowerup(forceAnti){
+const PU_TYPES = ['shield','doublejump','slow'];
+function mkPowerup(){
   const c=GC();
-  const isAnti = forceAnti || Math.random()<0.4;
-  const type = isAnti
-    ? APU_TYPES[~~(Math.random()*APU_TYPES.length)]
-    : PU_TYPES[~~(Math.random()*PU_TYPES.length)];
+  const type = PU_TYPES[~~(Math.random()*PU_TYPES.length)];
   return {
     x: W+40, y: H*(0.2+Math.random()*0.55),
-    r: c.BR*1.2, type, phase:0,
+    r: c.BR*0.85, type, phase:0,
     vx: -(c.SPD*0.9),
-    anti: isAnti,
   };
 }
-const PU_COLOR = {
-  shield:'#4ab9ff', doublejump:'#c8f135', slow:'#ff7fc8', widegap:'#ffd700', extralife:'#ff69b4',
-  turbo:'#ff3a3a', blackout:'#ff3a3a', dizzy:'#ff3a3a', ghost:'#ff3a3a', flip:'#ff3a3a',
-};
-const PU_ICON  = {
-  shield:'🛡', doublejump:'⚡', slow:'🐢', widegap:'⬆️', extralife:'❤️',
-  turbo:'💢', blackout:'🌑', dizzy:'😵', ghost:'👻', flip:'🔀',
-};
+const PU_COLOR = { shield:'#4ab9ff', doublejump:'#c8f135', slow:'#ff7fc8' };
+const PU_ICON  = { shield:'🛡', doublejump:'⚡', slow:'🐢' };
 function drawPowerup(pu){
   ctx.save();
   ctx.translate(pu.x, pu.y + Math.sin(pu.phase)*4);
   ctx.shadowColor=PU_COLOR[pu.type]; ctx.shadowBlur=18;
   ctx.beginPath(); ctx.arc(0,0,pu.r,0,Math.PI*2);
-  ctx.fillStyle= pu.anti ? 'rgba(40,0,0,.88)' : 'rgba(13,13,13,.82)';
-  ctx.fill();
+  ctx.fillStyle='rgba(13,13,13,.82)'; ctx.fill();
   ctx.strokeStyle=PU_COLOR[pu.type]; ctx.lineWidth=2.5; ctx.stroke();
-  // Anti-powerups get a second inner ring for warning
-  if(pu.anti){
-    ctx.beginPath(); ctx.arc(0,0,pu.r*0.7,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,60,60,0.35)'; ctx.lineWidth=1.5; ctx.stroke();
-  }
   ctx.shadowBlur=0;
   ctx.font=`${pu.r*1.1}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(PU_ICON[pu.type],0,1);
@@ -386,18 +360,7 @@ function activatePowerup(type){
   if(type==='shield'){ shield=true; shieldTimer=4500; sfxBeep(700); vibe(30); }
   if(type==='doublejump'){ doubleJumpReady=true; doubleJumpUsed=false; sfxBeep(880); vibe(20); }
   if(type==='slow'){ slowActive=true; slowTimer=4000; sfxBeep(440); vibe(20); }
-  if(type==='widegap'){ widegapActive=true; widegapTimer=6000; sfxBeep(660); vibe(25); }
-  if(type==='extralife'){ extralifeActive=true; sfxBeep(1000); vibe([20,10,40]); }
   boom(bird.x, bird.y);
-  puNotif = { ...PU_MSG[type], duration: 3000, elapsed: 0 };
-}
-function activateAntiPowerup(type){
-  if(type==='turbo'){   turboActive=true;   turboTimer=4000; }
-  if(type==='blackout'){ blackoutActive=true; blackoutTimer=3000; }
-  if(type==='dizzy'){   dizzyActive=true;   dizzyTimer=5000; }
-  if(type==='ghost'){   ghostActive=true;   ghostTimer=4000; }
-  if(type==='flip'){    flipActive=true;    flipTimer=4000; }
-  tone(200,'sawtooth',.4,.18); vibe([80,40,80,40,80]);
   puNotif = { ...PU_MSG[type], duration: 3000, elapsed: 0 };
 }
 // SFX for wind
@@ -416,18 +379,18 @@ function doFlap(){
   if(STATE!=='playing') return;
   resumeAC();
   const c=GC();
-  const flapForce = flipActive ? Math.abs(c.FLAP) : c.FLAP;
   // Normal flap: reset double jump tracking
   if(bird.vy >= 0 || !doubleJumpReady) {
-    bird.vy = flapForce;
-    if(doubleJumpReady) doubleJumpUsed=false;
+    bird.vy = c.FLAP;
+    if(doubleJumpReady) doubleJumpUsed=false; // reset on landing impulse
   } else if(doubleJumpReady && !doubleJumpUsed){
-    bird.vy = flapForce * 0.85;
+    // mid-air second jump
+    bird.vy = c.FLAP * 0.85;
     doubleJumpUsed=true; doubleJumpReady=false;
     tone(880,'sine',.1,.2); tone(1100,'sine',.08,.15,.07);
     vibe([10,10,20]); return;
   } else {
-    bird.vy = flapForce;
+    bird.vy = c.FLAP;
   }
   sfxFlap(); vibe(12);
 }
@@ -483,20 +446,6 @@ function drawBird(b){
     ctx.beginPath(); ctx.arc(0,0,b.r*1.55,0,Math.PI*2);
     ctx.strokeStyle='rgba(74,185,255,0.7)'; ctx.lineWidth=3;
     ctx.shadowColor='#4ab9ff'; ctx.shadowBlur=14; ctx.stroke();
-    ctx.shadowBlur=0;
-  }
-  // extra life ring
-  if(extralifeActive){
-    ctx.beginPath(); ctx.arc(0,0,b.r*1.75,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,105,180,0.7)'; ctx.lineWidth=2.5;
-    ctx.shadowColor='#ff69b4'; ctx.shadowBlur=12; ctx.stroke();
-    ctx.shadowBlur=0;
-  }
-  // widegap glow
-  if(widegapActive){
-    ctx.beginPath(); ctx.arc(0,0,b.r*1.95,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,215,0,0.45)'; ctx.lineWidth=2;
-    ctx.shadowColor='#ffd700'; ctx.shadowBlur=10; ctx.stroke();
     ctx.shadowBlur=0;
   }
   ctx.shadowColor=BC.hex; ctx.shadowBlur=16;
@@ -591,8 +540,8 @@ function cdLoop(ts){
 function gameLoop(ts){
   if(!lastTs) lastTs=ts;
   const rawDt=Math.min(ts-lastTs,50); lastTs=ts;
-  // 50+ slow power-up: halve game speed. Turbo: x2.5
-  const dt = slowActive ? rawDt * 0.5 : turboActive ? rawDt * 2.5 : rawDt;
+  // 50+ slow power-up: halve game speed
+  const dt = slowActive ? rawDt * 0.5 : rawDt;
   const c=GC();
 
   ctx.clearRect(0,0,W,H); drawBg();
@@ -625,15 +574,6 @@ function gameLoop(ts){
 
   // ── SHIELD TIMER ───────────────────────────────────
   if(shield){ shieldTimer-=rawDt; if(shieldTimer<=0){ shield=false; shieldTimer=0; } }
-  if(invincible>0) invincible-=rawDt;
-  // ── WIDEGAP TIMER ──────────────────────────────────
-  if(widegapActive){ widegapTimer-=rawDt; if(widegapTimer<=0){ widegapActive=false; widegapTimer=0; } }
-  // ── ANTI POWERUP TIMERS ────────────────────────────
-  if(turboActive){   turboTimer-=rawDt;   if(turboTimer<=0){   turboActive=false; } }
-  if(blackoutActive){ blackoutTimer-=rawDt; if(blackoutTimer<=0){ blackoutActive=false; } }
-  if(dizzyActive){   dizzyTimer-=rawDt;   if(dizzyTimer<=0){   dizzyActive=false; dizzyAngle=0; } }
-  if(ghostActive){   ghostTimer-=rawDt;   if(ghostTimer<=0){   ghostActive=false; } }
-  if(flipActive){    flipTimer-=rawDt;    if(flipTimer<=0){    flipActive=false; } }
 
   // ── PIPES ──────────────────────────────────────────
   pipeTimer+=dt;
@@ -723,11 +663,7 @@ function gameLoop(ts){
   // Collect powerups
   powerups=powerups.filter(pu=>{
     const dx=bird.x-pu.x, dy=bird.y-pu.y;
-    if(Math.hypot(dx,dy)<bird.r+pu.r){
-      if(pu.anti) activateAntiPowerup(pu.type);
-      else activatePowerup(pu.type);
-      return false;
-    }
+    if(Math.hypot(dx,dy)<bird.r+pu.r){ activatePowerup(pu.type); return false; }
     return pu.x>-50;
   });
 
@@ -740,7 +676,7 @@ function gameLoop(ts){
 
   if(bird.y-bird.r<0){ bird.y=bird.r; bird.vy=1; }
   if(bird.y+bird.r>H-c.GRH){
-    if(shield){ shield=false; invincible=600; bird.y=H-c.GRH-bird.r-2; bird.vy=c.FLAP*0.75; sfxBeep(300); boom(bird.x,bird.y); }
+    if(shield){ shield=false; bird.y=H-c.GRH-bird.r; bird.vy=-2; sfxBeep(300); }
     else { doGameOver(); return; }
   }
 
@@ -748,8 +684,7 @@ function gameLoop(ts){
   for(const b of bullets){
     const dx = bird.x-b.x, dy = bird.y-b.y;
     if(Math.hypot(dx,dy) < bird.r*0.85 + b.r){
-      if(shield){ shield=false; invincible=600; bullets.splice(bullets.indexOf(b),1); boom(b.x,b.y); sfxBeep(300); break; }
-      if(invincible>0) break;
+      if(shield){ shield=false; bullets.splice(bullets.indexOf(b),1); boom(b.x,b.y); sfxBeep(300); break; }
       doGameOver(); return;
     }
   }
@@ -759,16 +694,7 @@ function gameLoop(ts){
     const ge=p.topH+c.GAP, bx=bird.x, by=bird.y, br=bird.r*.80;
     if(bx+br>p.x&&bx-br<p.x+p.w){
       if(by-br<p.topH||by+br>ge){
-        if(shield){
-          shield=false;
-          invincible=600;
-          const gapCenter = p.topH + c.GAP/2;
-          bird.y = gapCenter;
-          bird.vy = bird.y > gapCenter ? c.FLAP * 0.6 : Math.abs(c.FLAP) * 0.3;
-          sfxBeep(300); boom(bird.x, bird.y);
-          break;
-        }
-        if(invincible>0) break;
+        if(shield){ shield=false; sfxBeep(300); break; }
         doGameOver(); return;
       }
     }
@@ -778,49 +704,12 @@ function gameLoop(ts){
   for(const e of enemies){
     const dx = bird.x-e.x, dy = bird.y-e.y;
     if(Math.hypot(dx,dy) < bird.r*0.85 + e.r){
-      if(shield){ shield=false; invincible=600; sfxBeep(300); boom(bird.x,bird.y); break; }
-      if(invincible>0) break;
+      if(shield){ shield=false; sfxBeep(300); break; }
       doGameOver(); return;
     }
   }
 
-  // ── ANTI-POWERUP VISUAL EFFECTS ────────────────────
-  // FLIP: transform canvas vertically
-  if(flipActive){
-    ctx.save();
-    ctx.translate(W/2, H/2);
-    ctx.scale(1,-1);
-    ctx.translate(-W/2,-H/2);
-  }
-  // DIZZY: oscillating rotation
-  if(dizzyActive){
-    dizzyAngle = Math.sin(Date.now()/180) * 0.09;
-    ctx.save();
-    ctx.translate(W/2,H/2);
-    ctx.rotate(dizzyAngle);
-    ctx.translate(-W/2,-H/2);
-  }
-
-  drawGround();
-
-  // GHOST: draw bird semi-transparent
-  if(ghostActive) ctx.globalAlpha = 0.18;
-  drawBird(bird);
-  if(ghostActive) ctx.globalAlpha = 1;
-
-  if(flipActive)  ctx.restore();
-  if(dizzyActive) ctx.restore();
-
-  // BLACKOUT: dark overlay with small circle of vision around bird
-  if(blackoutActive){
-    ctx.save();
-    const grad = ctx.createRadialGradient(bird.x,bird.y,bird.r*1.5, bird.x,bird.y,W*0.38);
-    grad.addColorStop(0,'rgba(0,0,0,0)');
-    grad.addColorStop(1,'rgba(0,0,0,0.97)');
-    ctx.fillStyle=grad;
-    ctx.fillRect(0,0,W,H);
-    ctx.restore();
-  }
+  drawGround(); drawBird(bird);
 
   // ── POWERUP NOTIFICATION ─────────────────────────────
   if(puNotif){
@@ -880,86 +769,11 @@ function gameLoop(ts){
 
 // ── GAME OVER ──────────────────────────────────────────
 function doGameOver(){
-  // Extra life: if active, revive with countdown instead of dying
-  if(extralifeActive){
-    extralifeActive=false;
-    sfxBeep(300); vibe([30,20,60]);
-    boom(bird.x, bird.y);
-    // Flash effect
-    const flash = document.createElement('div');
-    flash.style.cssText = `
-      position:fixed;inset:0;z-index:100;pointer-events:none;
-      background:rgba(255,100,180,0.55);
-      animation:redflash 0.6s ease-out forwards;
-    `;
-    document.body.appendChild(flash);
-    setTimeout(()=>flash.remove(), 700);
-    // Mini countdown before resuming
-    STATE='countdown';
-    cancelAnimationFrame(animId);
-    animId=requestAnimationFrame(cdLoop);
-    const cdEl=document.getElementById('cd');
-    const numEl=document.getElementById('cd-num');
-    function pop(txt, color){
-      numEl.textContent=txt;
-      numEl.style.color=color||'var(--text)';
-      numEl.style.fontSize='120px';
-      numEl.classList.remove('pop');
-      void numEl.offsetWidth;
-      numEl.classList.add('pop');
-    }
-    // Reset bird position safely
-    const c=GC();
-    bird.y=H*.44; bird.vy=0; bird.angle=0;
-    invincible=1500; // 1.5s invincibility after revival
-    cdEl.classList.add('show');
-    pop('3','#ff69b4'); sfxBeep(440); vibe(20);
-    setTimeout(()=>{ pop('2','#ff69b4'); sfxBeep(440); vibe(20); }, 900);
-    setTimeout(()=>{ pop('1','#ff69b4'); sfxBeep(440); vibe(20); }, 1800);
-    setTimeout(()=>{
-      numEl.style.fontSize='72px';
-      pop('¡Ya!','var(--accent)');
-      sfxBeep(880); vibe([30,20,60]);
-    }, 2700);
-    setTimeout(()=>{
-      cdEl.classList.remove('show');
-      numEl.style.fontSize=''; numEl.style.color='';
-      STATE='playing';
-      cancelAnimationFrame(animId);
-      lastTs=0;
-      animId=requestAnimationFrame(gameLoop);
-    }, 3350);
-    return;
-  }
-
   STATE='dead';
   cancelAnimationFrame(animId);
   sfxDie(); vibe([50,30,120]);
   boom(bird.x,bird.y);
   document.getElementById('hud').classList.remove('show');
-
-  // Red flash overlay
-  const flash = document.createElement('div');
-  flash.style.cssText = `
-    position:fixed;inset:0;z-index:100;pointer-events:none;
-    background:rgba(220,30,30,0.55);
-    animation:redflash 0.6s ease-out forwards;
-  `;
-  document.body.appendChild(flash);
-
-  // Screen shake via canvas transform
-  let shakeFrames = 18, shakeMag = 10;
-  function shakeLoop(){
-    if(shakeFrames-- <= 0){ gc.style.transform=''; return; }
-    const dx = (Math.random()-0.5)*shakeMag*2;
-    const dy = (Math.random()-0.5)*shakeMag*2;
-    gc.style.transform = `translate(${dx}px,${dy}px)`;
-    shakeMag *= 0.85;
-    requestAnimationFrame(shakeLoop);
-  }
-  shakeLoop();
-
-  setTimeout(()=>flash.remove(), 700);
   setTimeout(showDeadScreen, 680);
 }
 
@@ -990,18 +804,12 @@ function startCountdown(){
   document.getElementById('hud').classList.remove('show');
 
   score=0; pipes=[]; enemies=[]; bullets=[]; enemyTimer=0; pipeTimer=0; lastTs=0;
+  lastPipeTopH = -1;
   powerups=[]; powerupTimer=3000;
   windForce=0; windTimer=3000; windActive=false;
-  shield=false; shieldTimer=0; invincible=0;
+  shield=false; shieldTimer=0;
   slowActive=false; slowTimer=0;
   doubleJumpReady=false; doubleJumpUsed=false;
-  widegapActive=false; widegapTimer=0;
-  extralifeActive=false;
-  turboActive=false; turboTimer=0;
-  blackoutActive=false; blackoutTimer=0;
-  dizzyActive=false; dizzyTimer=0; dizzyAngle=0;
-  ghostActive=false; ghostTimer=0;
-  flipActive=false; flipTimer=0;
   puNotif=null;
   bird=mkBird();
 
@@ -1051,7 +859,7 @@ function beginPlay(){
 function showStart(){
   document.getElementById('card').innerHTML=`
     <span class="icon">🐦</span>
-    <div class="title">Flappy</div>
+    <div class="title">Flapsy</div>
     <div class="sub">Vuela entre los tubos.<br>No choques con nada.</div>
     <button class="btn" id="play-btn">Jugar →</button>
     <div class="char-row">
