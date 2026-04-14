@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Flappy</title>
+  <link rel="manifest" href="manifest.json">
 <style>
   :root {
     --bg: #0d0d0d;
@@ -905,6 +906,11 @@ best=parseInt(localStorage.getItem('fb')||'0');
 document.getElementById('hud-best').textContent=best;
 showStart();
 requestAnimationFrame(idleLoop);
+</script>
+  <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
 </script>
 </body>
 </html>
