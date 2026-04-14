@@ -1,4 +1,4 @@
-const CACHE = 'flappy-v1';
+const CACHE = 'flappy-v2';
 
 const ASSETS = [
   './',
